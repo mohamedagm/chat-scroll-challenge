@@ -1,55 +1,92 @@
-# Chat Auto-Scroll Challenge
+# 💬 Chat Auto-Scroll Challenge
 
-## Setup
+A Flutter chat app powered by the Gemini API, with a focus on delivering a smooth and intelligent auto-scroll experience during AI response streaming.
 
-1. Get a free Gemini API key from [ai.google.dev](https://ai.google.dev)
-2. Run `flutter pub get`
-3. Run `flutter run` (web, macOS, or any platform)
-4. Enter your API key and start chatting
+---
 
-## Your Task
+## 🌐 Deployed URL
 
-This app has scroll UX issues. Compare it against the reference implementation and fix them.
+**[Live Demo](#)** 
 
-**Reference:** https://iman-admin.github.io/chat-scroll-demo/
+---
 
-Test these scenarios in the reference demo before you start coding. Start by sending a message that produces a long response to fill the screen (e.g. _"Write a detailed essay about the history of the internet"_). If the response is too short, send another one.
+## 🛠️ UX Issues Identified & Fixed
 
-1. Send a message and let the response stream in.
-2. While a response is streaming, scroll up manually.
-3. While scrolled up, send a new message.
-4. While a response is streaming, scroll back down to the bottom.
+The original app had no scroll logic whatsoever — messages streamed in but the list never moved. Below is a breakdown of every issue found and how it was resolved.
 
-Your solution will be scored primarily on how closely it matches the reference. You are free to use any AI tools you'd like.
+---
 
-## How to Submit
+### 1. `_isAutoScrollEnabled` Flag
 
-1. Clone this repo into a **private** repository on your own GitHub account.
-2. Implement your solution.
-3. Deploy your solution to the web.
-4. Update this README with:
-   - The UX issues you identified and fixed.
-   - Your deployed URL.
-   - Include screen recordings for all five scenarios and the deployed URL below.
-5. Add **IMan-admin** as a collaborator to your private repo.
-6. Send us the link to your repo.
+**Problem:** No mechanism existed to track whether the user had intentionally scrolled away or was still following the stream.
 
+**Fix:** Added a single boolean flag `_isAutoScrollEnabled` as the source of truth. All scroll decisions read from or write to this flag, keeping the logic centralized and predictable.
 
-### Deployed URL
+---
 
-[Live Demo](https://your-deployed-url.com)
+### 2. Unified `_scrollToBottom({force})` Method
 
-### Screen Recordings
+**Problem:** Scroll calls were scattered and inconsistent.
 
-- **Scenario 1 (Basic Auto-Scroll):** [Watch Recording](https://your-recording/scenario1)
-- **Scenario 2 (Pause on Manual Scroll):** [Watch Recording](https://your-hrecording/scenario2)
-- **Scenario 3 (Send While Scrolled Up):** [Watch Recording](https://your-recording/scenario3)
-- **Scenario 4 (Resume Auto-Scroll After Scroll Down):** [Watch Recording](https://your-recording/scenario4)
- 
+**Fix:** Centralized all scrolling into one function with a `force` parameter:
+- `force: true` → uses `jumpTo()` for an instant snap _(used when sending a new message)_
+- `force: false` → uses `animateTo()` for smooth scrolling _(used during streaming)_
 
-## Evaluation Criteria
+---
 
-- Does each scenario work correctly in isolation?
-- Do all four scenarios work together without regressions?
-- Does the behavior match the reference demo?
-- Is the code clean, testable, and well-separated?
+### 3. Streaming Updates Connected to Scroll
+
+**Problem:** The list never scrolled as new chunks arrived from the AI.
+
+**Fix:** Added `_streamManager.addListener(_onStreamUpdate)` so that every new streaming chunk triggers a scroll — but only when streaming is active **and** auto-scroll is enabled.
+
+---
+
+### 4. `NotificationListener<ScrollNotification>` Wrapper
+
+**Problem:** There was no way to distinguish between a user scrolling manually and the app scrolling programmatically.
+
+**Fix:** Wrapped the chat list with a `NotificationListener<ScrollNotification>` to intercept all scroll events and determine their origin before deciding whether to pause or resume auto-scroll.
+
+---
+
+### 5. Scroll Policy in `_onScrollNotification`
+
+**Problem:** Auto-scroll had no awareness of user intent.
+
+**Fix:** Built a scroll policy that:
+- Uses `dragDetails != null` to detect **real user gestures only** (not programmatic scrolls)
+- If the user scrolls **up** → disables auto-scroll so they can read freely
+- If the user returns to the **bottom** (by drag or momentum) → re-enables auto-scroll
+
+---
+
+### 6. Correct Behavior When Sending a New Message
+
+**Problem:** Sending a message while scrolled up left the user stranded — the new response started streaming off-screen.
+
+**Fix:** In `_handleMessageSend`, before starting the new stream:
+1. Resets `_isAutoScrollEnabled = true`
+2. Forces an instant scroll snap to the bottom via `_scrollToBottom(force: true)`
+3. Then starts the streaming response
+
+---
+
+### 7. Flick / Momentum Scroll Handled Correctly
+
+**Problem:** Fast flick gestures that land at the bottom weren't detected, so auto-scroll stayed paused even after the user reached the bottom naturally.
+
+**Fix:** Added handling for `ScrollEndNotification` — after any momentum scroll ends, the position is checked and auto-scroll is re-enabled if the user landed near the bottom.
+
+---
+
+## 🎬 Screen Recordings
+
+| Scenario | Recording |
+|----------|-----------|
+| Scenario 1 — Basic Auto-Scroll | [Watch Recording](#) |
+| Scenario 2 — Pause on Manual Scroll Up | [Watch Recording](#) |
+| Scenario 3 — Send While Scrolled Up | [Watch Recording](#) |
+| Scenario 4 — Resume Auto-Scroll on Scroll Down | [Watch Recording](#) |
+
+---
